@@ -1,0 +1,93 @@
+import pybedtools 
+from pybedtools import BedTool
+import pandas as pd
+import subprocess
+
+
+
+def py_bed_to_bgandbw_custom_chrsizes(list_files, chr_sizes, list_scaling_factors=None):
+    """
+    #written by peteskene@gmail.com
+
+    #provide list of bed files; e.g. list_files = ['A.bed', 'B.bed', 'C.bed']; can include path; requires file extension to be 'bed'
+    #bed files do not need to be sorted; script does this
+    
+    #provide path to tab delimited chr sizes file (see pybedtools helper scripts for format)
+    
+    #automatically generates output filenames (including path if provided)
+    #e.g. 'A.bg', 'B.bg', 'C.bg' and 'A.bw', 'B.bw', 'C.bw'
+    
+    #list_scaling_factors=None (default); means that the in the bedtools genomecov tool scale will be set to 1
+    #to generate the bedgraphs and bigwigs, therefore representing raw reads counts.
+    
+    #Can optionally provide a list of floats (e.g. [1.0, 0.7, 11.1]) to be used as scaling factors
+    #will pair the bed file and scaling factors element wise, so 1st bed file maps is paired with 1st scaling factor
+    
+    
+    """
+    
+    #modifying the pybedtools bedgraph_to_bigwig module to accomodate user defined chr sizes file
+    #ensure correct format, as script will not test for error
+    def bedgraph_to_bigwig_custom(bedgraph, genome, output):
+        genome_file = genome
+        cmds = [
+            'bedGraphToBigWig',
+            bedgraph.fn,
+            genome_file,
+            output]
+        p = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        if p.returncode:
+            raise ValueError("cmds: %s\nstderr:%s\nstdout:%s"
+                             % (" ".join(cmds), stderr, stdout))
+        return output
+    
+    
+    print 'bed files imported:'
+    print '\n'.join(list_files)
+            
+    if list_scaling_factors!=None:
+        if type(list_scaling_factors)!=list:
+            return 'Exiting... Scaling factors not provided as a list'
+        for item in list_scaling_factors:
+            if type(item)!=float:
+                return 'Exiting... At least one scaling factor not provided as a float'
+        if len(list_files)!=len(list_scaling_factors):
+            return 'Exiting... Unequal number of bed files and scaling factors'
+    
+        print
+        print 'Scaling factors imported:'
+        print '\n'.join([str(item) for item in list_scaling_factors])
+        print
+        print 'Warning: will pair the bed file and scaling factors in order'
+        print
+        
+    if list_scaling_factors==None:
+        print
+        print 'No scaling factors provided, bedgraphs and bigwigs will represent raw read counts'
+        print
+        
+        list_scaling_factors = [1.0]*len(list_files)
+
+    
+    #generate output filenames for bedgraphs and bigwigs
+    bg_files = [f.replace('bed', 'bg') for f in list_files]
+    bw_files = [f.replace('bed', 'bw') for f in list_files]
+    
+    #make bedgraphs and bigwigs
+    for i in range(len(list_files)):
+
+        print 'operating on: ' + list_files[i]
+        print 'scaling factor: ' + str(list_scaling_factors[i])
+        
+        BedTool(list_files[i]).sort().genome_coverage(bg = True, g = chr_sizes, scale=list_scaling_factors[i]).moveto(bg_files[i])
+
+        print 'made bg file: ' + bg_files[i]
+
+        bedgraph_to_bigwig_custom(BedTool(bg_files[i]), chr_sizes, bw_files[i])
+
+        print 'made bw file: ' + bw_files[i]
+        print
+    print
+    
+    return 'Done'
